@@ -8,6 +8,7 @@ interface InputProps {
   onChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
   error?: string;
   disabled?: boolean;
+  className?:string;
   name?: string;
 }
 
@@ -20,6 +21,7 @@ export default function Input({
   error,
   disabled = false,
   name,
+  className=""
 } : InputProps){
   return (
     <div className="flex flex-col space-y-1 w-full">
