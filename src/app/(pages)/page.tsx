@@ -2,63 +2,120 @@
 import Image from "next/image";
 //import Button from "@components/button";
 //import Input from "@components/input";
-import { io } from "socket.io-client";
 //import AutoResizeTextarea from "@components/autoresize-textarea";
-import React, { useEffect, useRef, useState } from "react";
-const socket = io("http://localhost:8080");
+import React, { useEffect, useRef, useState, useCallback } from "react";
+import { getSocket } from "@utils/socket";
+import { useSocket } from "@app/hooks/useSocket";
 
-socket.on("connect", () => {
-  console.log("Socket connected : " + socket.id);
-});
+interface ServerMessage {
+  type: string;
+  token: string;
+}
 
-socket.on("disconnect", () => {
-  console.log(socket.id); // undefined
-});
+interface Message {
+  id:number|null;
+  role:string;
+  text:string;
+}
 
 export default function Home() {
+  const socket = getSocket();
   const [queryByUser,setQueryByUser] = useState("");
   const [isThinking, setIsThinking] = useState(false);
-  const [messages, setMessages] = useState([
+  const [messages, setMessages] = useState<Message[]>([
     { id: 1, role: "assistant", text: "Hi — I\'m a ChatGPT-like assistant. Ask me anything!" }]);
   const listRef = useRef<HTMLDivElement>(null);
+  const partialIdRef = useRef<number>(null);
     
   // Auto-scroll on new messages
   useEffect(() => {
     if (!listRef.current) return;
     listRef.current.scrollTop = listRef.current.scrollHeight;
   }, [messages, isThinking]);
+  
+  const handleServerResponse  = useCallback((args:ServerMessage) => {
+    let token = null;
+    try {
+      const parsed = args;//JSON.parse(args);
+      if (parsed.type === "token") {
+        token = parsed.token;
+        appendToPartial(token);
+        //return;
+      }
+      else if (parsed.type === "done") {
+          finalizePartial();
+          //return;
+      }
+    } catch (e) {
+      const errMsg = { id: Date.now() + Math.random(), role: "assistant", text: 'Sorry, something went wrong.' };
+      setMessages((m) => [...m, errMsg]);
+      console.error(errMsg);
+      setIsThinking(false);
+    }
+  
+  },[])
 
+  useSocket("server_message",handleServerResponse);
+
+  /*useEffect(() =>{
+    const socket = getSocket();
+    
+    socket.on("server_message", (...args ) => {
+      handleServerResponse(args.toString());
+    });
+
+    return () => {
+      socket.off("message");
+    };
+
+  },[isThinking]);*/
+  
   // Keyboard shortcut: Enter to send, Shift+Enter for newline
   function onKeyDown(e:React.KeyboardEvent<HTMLTextAreaElement>) {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
-      sendRequestToServer();
+      sendRequestToServer(e);
     }
   }
 
-  const sendRequestToServer = (): void => {
+  const sendRequestToServer = (e:React.SyntheticEvent) => {
+    e.preventDefault();
     const query = queryByUser.trim();
     if (!query) return;
-    const userMessage = { id: Date.now() + Math.random(), role: "user", text:query };
-    socket.emit("client_message",query);
-    setMessages((m) => [...m, userMessage]);
+    //if (!socket.connected) return
+    let assistantId = Date.now() + Math.random();
+    partialIdRef.current = assistantId;
+    const clientMessage = {"id": assistantId,"role":"user","text":query };
+    socket.emit("client_message", clientMessage);
+    setMessages((m) => [...m, clientMessage]);
     setQueryByUser("");
     setIsThinking(true);
   };
 
-  socket.on("server_message", (...args ) => {
-    try {
-      console.log("Received message from server: " + args); 
-      const receivedMessage = { id: Date.now() + Math.random(), role: "server", text : args.toString() };
-      setMessages((m) => [...m, receivedMessage]);
-    } catch (err){
-      const errMsg = { id: Date.now() + Math.random(), role: "server", text: 'Sorry, something went wrong.' };
-      setMessages((m) => [...m, errMsg]);
-      //console.error(err);
-    } finally{
-      setIsThinking(false);
+  function appendToPartial(token: string) {
+    setMessages((prev) => {
+      const copy = prev.slice();
+      const lastMessage = copy[copy.length-1];
+      if (lastMessage.role === "user") {//first server message has appeared
+        return [...copy, { "id": Date.now()+Math.random(), 'role': 'assistant', 'text': token }];
+      } else{
+        copy[copy.length-1] = { ...lastMessage, text: lastMessage.text + token };
+        return copy;
+      }
+    });
+  }
+
+  function finalizePartial() {
+    setIsThinking(false);
+    partialIdRef.current = 0;
+  }
+
+  function cancelStreaming() {
+    // Optionally append a message that streaming was canceled
+    if (partialIdRef.current) {
+      setMessages((m) => m.map(msg => msg.id === partialIdRef.current ? { ...msg, text: msg.text + "[Stopped]" } : msg));
     }
-  });
+  }
 
   return (
       <div className="flex min-h-screen w-full justify center bg-gray-50">
@@ -83,7 +140,7 @@ export default function Home() {
 
             {isThinking && (
               <div className="flex justify-start">
-                <div className="max-w-[60%] px-4 py-2 rounded-lg bg-gray-100 text-gray-500 shadow-sm">
+                <div className="max-w-[60%] px-4 py-2 rounded-lg bg-blue-500 text-white shadow-sm">
                   <TypingDots />
                 </div>
               </div>
@@ -92,17 +149,17 @@ export default function Home() {
 
           {/* Composer */}
           <footer>
-            <form onSubmit={sendRequestToServer} className="p-4 border-t">
+            <form onSubmit={(e)=> sendRequestToServer(e)} className="p-4 border-t">
               <div className="flex gap-3">
                 <textarea
                   value={queryByUser}
                   onChange={(e) => setQueryByUser(e.target.value)}
-                  onKeyDown={onKeyDown}
+                  onKeyDown={(e)=>onKeyDown(e)}
                   placeholder="Type your message — Enter to send, Shift+Enter for newline"
                   className="flex-1 min-h-[48px] max-h-40 resize-none p-3 rounded-lg border border-gray-500 text-gray-800 focus:outline-none focus:border-blue-500 focus:text-blue-700"
                 />
                 <div className="flex flex-col gap-2">
-                  <button type="submit" className="px-4 py-2 rounded-lg bg-indigo-600 text-white font-semibold shadow-sm hover:opacity-95">
+                  <button type ='submit' className="px-4 py-2 rounded-lg bg-indigo-600 text-white font-semibold shadow-sm hover:opacity-95">
                     Send
                   </button>
                   <button

@@ -23,7 +23,8 @@
         "@app/*": ["src/app/*"],
         "@components/*": ["src/components/*"],
         "@utils/*": ["src/utils/*"],
-        "@styles/*": ["src/styles/*"]
+        "@styles/*": ["src/styles/*"],
+        "@hooks/*" : ["src/hooks/*"],
     }
   },
   "include": [
