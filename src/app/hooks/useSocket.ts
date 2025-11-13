@@ -1,13 +1,13 @@
 "use client";
 import { useEffect } from "react";
-import { getSocket } from "@utils/socket";
+import SocketManager from "@utils/socket";
 
 export function useSocket<T>(
   event: string,
   callback: (data: T) => void
 ) {
   useEffect(() => {
-    const socket = getSocket();
+    const socket = SocketManager.getInstance().getSocket();
 
     // listen for event
     socket.on(event, callback);

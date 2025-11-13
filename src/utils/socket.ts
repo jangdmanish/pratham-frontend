@@ -1,12 +1,25 @@
 import { io, Socket } from "socket.io-client";
 
-let socket: Socket | null = null;
+//let socket: Socket | null = null;
 
-export const getSocket = () => {
-  if (!socket) {
-    socket = io("http://localhost:8080", {
+export default class SocketManager {
+  private static instance : SocketManager;
+  private socket:Socket;
+
+  private constructor (){
+    this.socket = io("http://localhost:8080", {
       transports: ["websocket"], // avoid polling
     });
   }
-  return socket;
-};
+
+  public static getInstance() : SocketManager{
+    if(!SocketManager.instance){
+      SocketManager.instance = new SocketManager();
+    }
+    return SocketManager.instance;
+  }
+
+  public getSocket = () =>{
+    return this.socket;
+  }
+}

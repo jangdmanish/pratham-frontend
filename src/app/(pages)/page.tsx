@@ -4,7 +4,7 @@ import Image from "next/image";
 //import Input from "@components/input";
 //import AutoResizeTextarea from "@components/autoresize-textarea";
 import React, { useEffect, useRef, useState, useCallback } from "react";
-import { getSocket } from "@utils/socket";
+import SocketManager from "@utils/socket";
 import { useSocket } from "@app/hooks/useSocket";
 
 interface ServerMessage {
@@ -19,7 +19,7 @@ interface Message {
 }
 
 export default function Home() {
-  const socket = getSocket();
+  const socket = SocketManager.getInstance().getSocket();
   const [queryByUser,setQueryByUser] = useState("");
   const [isThinking, setIsThinking] = useState(false);
   const [messages, setMessages] = useState<Message[]>([
@@ -30,7 +30,7 @@ export default function Home() {
   // Auto-scroll on new messages
   useEffect(() => {
     if (!listRef.current) return;
-    listRef.current.scrollTop = listRef.current.scrollHeight;
+    listRef.current.scrollIntoView();
   }, [messages, isThinking]);
   
   const handleServerResponse  = useCallback((args:ServerMessage) => {
@@ -56,6 +56,20 @@ export default function Home() {
   },[])
 
   useSocket("server_message",handleServerResponse);
+
+  useEffect(() => {
+    const handleBeforeUnload = () => {
+      if (socket){
+          socket.disconnect();
+      }
+    };
+
+    window.addEventListener('beforeunload', handleBeforeUnload);
+
+    return () => {
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+    };
+  }, []);
 
   /*useEffect(() =>{
     const socket = getSocket();
